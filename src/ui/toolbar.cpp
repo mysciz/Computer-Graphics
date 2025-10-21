@@ -196,9 +196,34 @@ void Toolbar::layout_mode(Scene& scene)
             );
             ImGui::PopItemWidth();
             ImGui::PopID();
-            selected_object->rotation = AngleAxisf(radians(x_angle), Vector3f::UnitX())
-                                      * AngleAxisf(radians(y_angle), Vector3f::UnitY())
-                                      * AngleAxisf(radians(z_angle), Vector3f::UnitZ());
+            //selected_object->rotation = AngleAxisf(radians(x_angle), Vector3f::UnitX())
+            //                          * AngleAxisf(radians(y_angle), Vector3f::UnitY())
+            //                         * AngleAxisf(radians(z_angle), Vector3f::UnitZ());
+                // 将角度转换为弧度
+            float x_rad = radians(x_angle);
+            float y_rad = radians(y_angle);
+            float z_rad = radians(z_angle);
+
+            // 计算绕X轴旋转的四元数
+            float cx = cos(x_rad / 2);
+            float sx = sin(x_rad / 2);
+            Eigen::Quaternionf qx = Eigen::Quaternionf(cx, sx, 0, 0);
+
+            // 计算绕Y轴旋转的四元数
+            float cy = cos(y_rad / 2);
+            float sy = sin(y_rad / 2);
+            Eigen::Quaternionf qy = Eigen::Quaternionf(cy, 0, sy, 0);
+
+            // 计算绕Z轴旋转的四元数
+            float cz = cos(z_rad / 2);
+            float sz = sin(z_rad / 2);
+            Eigen::Quaternionf qz = Eigen::Quaternionf(cz, 0, 0, sz);
+
+            // 计算最终的旋转四元数
+            Eigen::Quaternionf q_final = qz * qy * qx;
+
+            // 应用旋转到对象
+            selected_object->rotation = q_final;
         }
         ImGui::EndTabItem();
     }

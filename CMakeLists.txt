@@ -119,3 +119,8 @@ set(current_target ${PROJECT_NAME})
 include(${CMAKE_CURRENT_SOURCE_DIR}/CompilerFlags.cmake)
 
 file(COPY ${PROJECT_SOURCE_DIR}/resources DESTINATION ${PROJECT_BINARY_DIR})
+
+if(MSVC)
+    add_compile_options(/W3)          # 把警告等级从 /W4 降到 /W3
+    add_compile_options(/wd4459)      # 忽略 "声明隐藏" 警告
+endif()

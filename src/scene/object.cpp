@@ -45,7 +45,43 @@ Object::Object(const string& object_name) :
 
 Matrix4f Object::model()
 {
-    return Matrix4f::Identity();
+    const Quaternionf& r = rotation;
+    auto [x_angle, y_angle, z_angle] = quaternion_to_ZYX_euler(r.w(), r.x(), r.y(), r.z());
+    // Construct the rotation matrix with euler angles.
+    x_angle = radians(x_angle);
+    y_angle = radians(y_angle);
+    z_angle = radians(z_angle);
+    Matrix4f x_rotation_matrix = Matrix4f::Identity();
+    x_rotation_matrix(1, 1) = std::cos(x_angle);
+    x_rotation_matrix(1, 2) = -std::sin(x_angle);
+    x_rotation_matrix(2, 1) = std::sin(x_angle);
+    x_rotation_matrix(2, 2) = std::cos(x_angle);
+    Matrix4f y_rotation_matrix = Matrix4f::Identity();
+    y_rotation_matrix(0, 0) = std::cos(y_angle);
+    y_rotation_matrix(0, 2) = std::sin(y_angle);
+    y_rotation_matrix(2, 0) = -std::sin(y_angle);
+    y_rotation_matrix(2, 2) = std::cos(y_angle);
+    Matrix4f z_rotation_matrix = Matrix4f::Identity();
+    z_rotation_matrix(0, 0) = std::cos(z_angle);
+    z_rotation_matrix(0, 1) = -std::sin(z_angle);
+    z_rotation_matrix(1, 0) = std::sin(z_angle);
+    z_rotation_matrix(1, 1) = std::cos(z_angle);
+    Matrix4f rotation_matrix = x_rotation_matrix * y_rotation_matrix * z_rotation_matrix;
+     // 构建平移矩阵
+    Eigen::Matrix4f translation_matrix = Eigen::Matrix4f::Identity();
+    translation_matrix(0, 3) = center.x();
+    translation_matrix(1, 3) = center.y();
+    translation_matrix(2, 3) = center.z();
+     // 构建缩放矩阵
+    Eigen::Matrix4f scaling_matrix = Eigen::Matrix4f::Identity();
+    scaling_matrix(0, 0) = scaling.x();
+    scaling_matrix(1, 1) = scaling.y();
+    scaling_matrix(2, 2) = scaling.z(); 
+    // 构建模型矩阵
+    Matrix4f model_matrix =  translation_matrix*rotation_matrix*scaling_matrix ;
+    return model_matrix;
+    
+
 }
 
 void Object::update(vector<Object*>& all_objects)

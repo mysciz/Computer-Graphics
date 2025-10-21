@@ -1,0 +1,15 @@
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\context.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\context.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\init.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\init.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\input.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\input.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\monitor.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\monitor.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\vulkan.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\vulkan.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\window.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\window.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\win32_init.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\win32_init.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\win32_joystick.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\win32_joystick.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\win32_monitor.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\win32_monitor.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\win32_time.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\win32_time.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\win32_thread.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\win32_thread.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\win32_window.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\win32_window.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\wgl_context.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\wgl_context.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\egl_context.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\egl_context.obj
+E:\mybook\junior\course\Graphics\dandelion\deps\glfw\src\osmesa_context.c;E:\mybook\junior\course\Graphics\dandelion\test\build2\deps\glfw\src\glfw.dir\Release\osmesa_context.obj
