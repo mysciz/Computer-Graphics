@@ -103,7 +103,7 @@ optional<Edge*> HalfedgeMesh::flip_edge(Edge* e)
     f2->halfedge = h_2_3;
     // 更新边的半边
     e->halfedge = h;
-    logger->trace("---startflippingedge {}---",e->id);
+    /*logger->trace("---startflippingedge {}---",e->id);
     //假如将e的两个端点赋值给v1和v2，将两个相对位置的点赋值给v3和v4
     logger->trace("(v1, v2)({},{})",v1->id,v2->id);
     logger->trace("(v3, v4)({},{})",v3->id,v4->id);
@@ -114,7 +114,11 @@ optional<Edge*> HalfedgeMesh::flip_edge(Edge* e)
     logger->trace("face 214:{}->{}->{}",f2->halfedge->from->id,
     f2->halfedge->next->from->id,
     f2->halfedge->next->next->from->id);
-    logger->trace("---end---");
+    logger->trace("---end---");*/
+    /*optional<HalfedgeMeshFailure> check_result = validate();
+    if (check_result.has_value()) {
+    return std::nullopt;
+    }*/
     return e;
 }
 
@@ -124,14 +128,19 @@ optional<Vertex*> HalfedgeMesh::split_edge(Edge* e)
     // 创建新顶点
     Vertex* v_new = new_vertex();
     if (!v_new) return std::nullopt;
-
     // 要用到的半边
     Halfedge* h_1_n = e->halfedge;
+    
+    if(!h_1_n->is_boundary()&&h_1_n->inv->is_boundary()){
+        logger->info("---not is boundary---",h_1_n->id);
+        h_1_n = h_1_n->inv;
+    }
     Halfedge* h_2_n = h_1_n->inv;
     Halfedge* h_2_3 = h_1_n->next;
     Halfedge* h_3_1 = h_2_3->next;
     Halfedge* h_1_4 = h_2_n->next;
     Halfedge* h_4_2 = h_1_4->next;
+    //logger->trace("---h_1_n->id:{},h_2_n->id:{},h_3_1->id:{},h_4_2->id:{}", h_1_n->id,h_2_n->id,h_3_1->id,h_4_2->id);    
     // 要用到的顶点
     Vertex* v1 = h_1_n->from;
     Vertex* v2 = h_2_n->from;
@@ -147,14 +156,45 @@ optional<Vertex*> HalfedgeMesh::split_edge(Edge* e)
     Halfedge* h_4_n = new_halfedge();
     Halfedge* h_n_1 = new_halfedge();
     Halfedge* h_n_2 = new_halfedge();
+    //logger->trace("---h_n_1->id:{},h_n_2->id:{},h_n_3->id:{},h_n_4->id:{}", h_n_1->id,h_n_2->id,h_n_3->id,h_n_4->id);
     Face* f2_3 = new_face();
     Face* f1_4 = new_face();
     Edge* e2_n = new_edge();
     Edge* e3_n = new_edge();
     Edge* e4_n = new_edge();
+    //logger->trace("---e3_n->id:{},e4_n->id:{}", e3_n->id,e4_n->id);
     v_new->pos=(v1->pos+v2->pos)/2.0f;
     v_new->halfedge = h_n_1;
     //设置新建元素
+    if(e->on_boundary()){
+    logger->trace("h_1_n->id:{},h_1_n->inv->id:{},h_1_n->next->id:{},h_1_n->prev->id:{},h_1_n->face->id:{}", h_1_n->id,h_1_n->inv->id,h_1_n->next->id,h_1_n->prev->id,h_1_n->face->id)
+    ;
+    h_n_1->set_neighbors(h_1_4,h_4_n,h_1_n,v_new,e,f1_4);
+    h_4_n->set_neighbors(h_n_1,h_1_4,h_n_4,v4,e4_n,f1_4);
+    h_n_4->set_neighbors(h_4_2,h_2_n,h_4_n,v_new,e4_n,f2_4);
+    h_2_n->set_neighbors(h_n_4,h_4_2,h_n_2,v2,e2_n,f2_4);
+    f2_4->halfedge = h_4_2;
+    f1_4->halfedge = h_1_4;
+    h_1_4->next = h_4_n;
+    h_1_4->prev = h_n_1;
+    h_1_4->face = f1_4;
+    h_4_2->next = h_2_n;
+    h_4_2->prev = h_n_4;
+    h_4_2->face = f2_4;
+    e4_n->halfedge=h_n_4;
+    e3_n->halfedge=h_n_3;
+    e2_n->halfedge=h_n_2;
+    h_1_n->next=h_3_1;
+    h_3_1->prev=h_1_n;
+    h_2_3->next=h_n_2;
+    h_2_3->prev=h_n_2;
+    h_n_2->set_neighbors(h_2_3,h_2_3,h_2_n,v_new,e2_n,f1_3);
+    f1_3->halfedge=h_3_1;
+    h_2_3->edge=e2_n;
+    e->halfedge=h_1_n;
+    return v_new;
+    }
+    e->halfedge=h_1_n;
     h_1_n->set_neighbors(h_n_3,h_3_1,h_n_1,v1,e,f1_3);
     h_3_1->prev = h_n_3;
     h_n_3->set_neighbors(h_3_1,h_1_n,h_3_n,v_new,e3_n,f1_3);
@@ -184,7 +224,10 @@ optional<Vertex*> HalfedgeMesh::split_edge(Edge* e)
     //更新面片的半边
     f2_4->halfedge = h_4_2;
     f2_3->halfedge = h_2_3;
-   
+    optional<HalfedgeMeshFailure> check_result = validate();
+    if (check_result.has_value()) {
+    return std::nullopt;
+    }
     return v_new;
 }
 
@@ -197,11 +240,14 @@ optional<Vertex*> HalfedgeMesh::collapse_edge(Edge* e)
     if (!v_new) return std::nullopt;
     // 要用到的半边
     Halfedge* h=e->halfedge;
+    if(!h->is_boundary())//
+        h = h->inv;
     Halfedge* h_inv=h->inv;
     Halfedge* h_inv1=h->next->inv;
     Halfedge* h_inv2=h_inv->next->inv;
     Halfedge* h1=h->prev->inv;
     Halfedge* h2=h_inv->prev->inv;
+    logger->trace("---h->id:{},h_inv->id:{},h_inv1->id:{},h_inv2->id:{},h1->id:{},h2->id:{}", h->id,h_inv->id,h_inv1->id,h_inv2->id,h1->id,h2->id);
     h_inv2->from->halfedge=h_inv2;
     h_inv1->from->halfedge=h_inv1;
     h2->edge->halfedge=h2;
@@ -238,6 +284,8 @@ optional<Vertex*> HalfedgeMesh::collapse_edge(Edge* e)
     erase(h_inv);
     }
     else{
+    h->prev->next=h->next;
+    h->next->prev=h->prev;//虚面调整
     erase(h->from);
     erase(h_inv->from);
     erase(h_inv->next->edge);
@@ -247,7 +295,10 @@ optional<Vertex*> HalfedgeMesh::collapse_edge(Edge* e)
     erase(h_inv->face);
     erase(h_inv);
     }
-
+    optional<HalfedgeMeshFailure> check_result = validate();
+    if (check_result.has_value()) {
+    return std::nullopt;
+    }
     return v_new;
 }
 
@@ -260,7 +311,7 @@ void HalfedgeMesh::loop_subdivide()
     logger->info(
         "subdivide object {} (ID: {}) with Loop Subdivision strategy", object.name, object.id
     );
-    logger->info("original mesh: {} vertices, {} faces in total", vertices.size, faces.size);
+    logger->info("original mesh: {} vertices, {} faces in total,{} edges", vertices.size, faces.size,edges.size);
     // Each vertex and edge of the original mesh can be associated with a vertex
     // in the new (subdivided) mesh.
     // Therefore, our strategy for computing the subdivided vertex locations is to
@@ -274,37 +325,61 @@ void HalfedgeMesh::loop_subdivide()
     // the Loop subdivision rule and store them in Vertex::new_pos.
     //    At this point, we also want to mark each vertex as being a vertex of the
     //    original mesh. Use Vertex::is_new for this.
+    // Step 1: Compute new positions for all the original vertices in the input mesh using the Loop subdivision rule
+    logger->info("---begin computing new positions for original vertices---");
     for (Vertex* v = vertices.head; v != nullptr; v = v->next_node) {
-        v->is_new = false;
-        bool is_boundary_vertex = false;
-        // Check if the vertex is on the boundary by checking its incident halfedges
-        Halfedge* he = v->halfedge;
-        do {
-            if (he->is_boundary()) {
-                is_boundary_vertex = true;
-                break;
+        // Formula 2.2: Compute new position for vertex v
+        bool is_boundary = false;//记录是否为边界顶点
+        Halfedge* h = v->halfedge;
+        Halfedge* next_h = h->inv->next;
+        v->new_pos = (3.0f/4.0f)*v->pos;
+        while(next_h!= h){
+            if(h->edge->on_boundary()){
+                v->new_pos += (1.0f/8.0f)*next_h->inv->from->pos;
+                is_boundary=true;
             }
-            he = he->next;
-        } while (he != v->halfedge);
-
-        // Loop subdivision rule for vertices
-        if (is_boundary_vertex) {
-            // For boundary vertices
-            v->new_pos = (1 - 3.0 / 8) * v->pos + 3.0 / 8 * (v->halfedge->from->pos + v->halfedge->inv->from->pos) / 2;
+            next_h=next_h->inv->next;
+        }
+        if(!is_boundary){//不在边上使用公式2.2
+        float u;
+        if (v->degree() == 3) {
+            u = 3.0f / 16.0f;
         } else {
-            // For interior vertices
-            int n = v->degree();
-            v->new_pos = (n - 3.0) / n * v->pos + 3.0 / (2 * n) * (v->halfedge->from->pos + v->halfedge->inv->from->pos);
-            he = v->halfedge;
-            do {
-                v->new_pos += 1.0 / (2 * n) * he->inv->next->from->pos;
-                he = he->next;
-            } while (he != v->halfedge);
+            u = 3.0f / (8.0f * v->degree());
+        }
+        v->new_pos = (1 - v->degree() * u) * v->pos + u *v->degree() * v->neighborhood_center();
+        v->is_new = false; // Mark as old vertex
         }
     }
+     check_result = validate();
+    if (check_result.has_value()) {
+        return;
+    }
+    logger->info("---end computing new positions for original vertices---");
     // Next, compute the subdivided vertex positions associated with edges, and
     // store them in Edge::new_pos.
-
+    // Step 2: Compute the subdivided vertex positions associated with edges, and store them in Edge::new_pos
+    logger->info("---begin computing new positions for edges---");
+    for (Edge* e = edges.head; e != nullptr; e = e->next_node) {
+        Eigen::Vector3f v1 = e->halfedge->from->pos;
+        Eigen::Vector3f v2 = e->halfedge->inv->from->pos;
+        if (!e->is_new) { // Only process original edges
+            if(e->on_boundary()){
+            e->new_pos=(1.0f/2.0f)*(v1+v2);//在边上使用公式2.3
+            }
+            else{
+            Eigen::Vector3f v3 = e->halfedge->face->center();
+            Eigen::Vector3f v4 = e->halfedge->inv->face->center();
+            Eigen::Vector3f new_pos = (1.0f / 8.0f) * (v1 + v2) + (3.0f / 8.0f) * (v3 + v4);//不在边上使用公式2.1 但是这里的v3 v4使用三角形的中心 修改了公式2.1
+            e->new_pos = new_pos;
+            }
+        }
+    }
+    check_result = validate();
+    if (check_result.has_value()) {
+        return;
+    }
+    logger->info("---end computing new positions for edges---");
     // Next, we're going to split every edge in the mesh, in any order.
     // We're also going to distinguish subdivided edges that came from splitting
     // an edge in the original mesh from new edges by setting the boolean Edge::is_new.
@@ -315,11 +390,68 @@ void HalfedgeMesh::loop_subdivide()
     // edges: original edges, edges split from original edges and newly added edges.
     // The newly added edges are marked with Edge::is_new property, so there is not
     // any other property to mark the edges I just split.
-
+    logger->info("---begin splitting edges---");
+    vector<Edge*> original_edges;
+    //int count=0;
+    for (Edge* e = edges.head; e != nullptr; e = e->next_node) {
+            original_edges.push_back(e);
+            //logger->trace("push edge {}", e->id);
+    }
+    for (Edge* e : original_edges) {
+        if (!e->is_new) { // Only process original edges
+            //logger->trace("split edge {}", e->id);
+            std::optional<Vertex*> new_vertex = split_edge(e);
+            //count++;
+            //logger->trace("count:{}",count);
+            /*check_result = validate();
+            if (check_result.has_value()) {
+            logger->error("split edge {} failed", e->id);
+                return;
+            }*/
+            Vertex* v=new_vertex.value();
+            v->is_new=true;//标记新边和新顶点
+            if(e->on_boundary()){
+                e->halfedge->inv->prev->edge->is_new=true;
+            }
+            else{
+            e->halfedge->inv->prev->edge->is_new=true;
+            e->halfedge->next->edge->is_new=true;
+            //logger->trace("e3->id:{},e4->id:{}", e->halfedge->next->edge->id, e->halfedge->inv->prev->edge->id);
+            }
+            v->pos=e->new_pos;//顺手修改新顶点的坐标
+        }
+    }
+    logger->info("---end splitting edges---");
     // Now flip any new edge that connects an old and new vertex.
-
+    logger->info("---begin flipping edges---");
+    for (Edge* e = edges.head; e != nullptr; e = e->next_node){
+         if (e->is_new) { // Only process new edges
+            //logger->trace("check edge {}", e->id);
+            Vertex* v1 = e->halfedge->from;
+            Vertex* v2 = e->halfedge->inv->from;
+            if ((!v1->is_new && v2->is_new) || (v1->is_new && !v2->is_new)) {
+                optional<Edge*>flipped_edge =flip_edge(e);      
+            }
+        }
+        if(e->next_node==nullptr){
+            logger->trace("check edge end");
+        }
+    }
+    logger->info("---end flipping edges---");
     // Finally, copy new vertex positions into the Vertex::pos.
-
+    logger->info("---begin copying new vertex positions into old vertices---");
+    for(Vertex* v = vertices.head; v != nullptr; v = v->next_node){
+        if(!v->is_new)
+        v->pos=v->new_pos;//修改旧顶点的坐标
+    }
+    logger->info("---end copying new vertex positions into old vertices---");
+    //将所有的属性重置
+    for(Edge* e = edges.head; e != nullptr; e = e->next_node){
+        e->is_new=false;
+    }
+    for(Vertex* v = vertices.head; v != nullptr; v = v->next_node){
+        v->is_new=false;
+    }
     // Once we have successfully subdivided the mesh, set global_inconsistent
     // to true to trigger synchronization with GL::Mesh.
     global_inconsistent = true;
