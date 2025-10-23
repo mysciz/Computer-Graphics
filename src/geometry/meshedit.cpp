@@ -150,25 +150,25 @@ optional<Vertex*> HalfedgeMesh::split_edge(Edge* e)
     Face* f1_3 = h_1_n->face;
     Face* f2_4 = h_2_n->face;
     // 重新连接各基本元素
-    Halfedge* h_n_3 = new_halfedge();
+   
     Halfedge* h_n_4 = new_halfedge();
-    Halfedge* h_3_n = new_halfedge();
+    
     Halfedge* h_4_n = new_halfedge();
     Halfedge* h_n_1 = new_halfedge();
     Halfedge* h_n_2 = new_halfedge();
-    //logger->trace("---h_n_1->id:{},h_n_2->id:{},h_n_3->id:{},h_n_4->id:{}", h_n_1->id,h_n_2->id,h_n_3->id,h_n_4->id);
-    Face* f2_3 = new_face();
+    logger->trace("---h_n_1->id:{},h_n_2->id:{},h_n_4->id:{}", h_n_1->id,h_n_2->id,h_n_4->id);
+    
     Face* f1_4 = new_face();
     Edge* e2_n = new_edge();
-    Edge* e3_n = new_edge();
+    
     Edge* e4_n = new_edge();
     //logger->trace("---e3_n->id:{},e4_n->id:{}", e3_n->id,e4_n->id);
     v_new->pos=(v1->pos+v2->pos)/2.0f;
     v_new->halfedge = h_n_1;
     //设置新建元素
     if(e->on_boundary()){
-    logger->trace("h_1_n->id:{},h_1_n->inv->id:{},h_1_n->next->id:{},h_1_n->prev->id:{},h_1_n->face->id:{}", h_1_n->id,h_1_n->inv->id,h_1_n->next->id,h_1_n->prev->id,h_1_n->face->id)
-    ;
+    if(h_1_n->is_boundary())
+    logger->trace("h->from->id:{},h->next->inv->id:{},h->inv->from->id:{},v_new->id:{}",h_1_n->from->id,h_1_n->next->inv->from->id,h_1_n->inv->from->id,v_new->id);
     h_n_1->set_neighbors(h_1_4,h_4_n,h_1_n,v_new,e,f1_4);
     h_4_n->set_neighbors(h_n_1,h_1_4,h_n_4,v4,e4_n,f1_4);
     h_n_4->set_neighbors(h_4_2,h_2_n,h_4_n,v_new,e4_n,f2_4);
@@ -182,18 +182,24 @@ optional<Vertex*> HalfedgeMesh::split_edge(Edge* e)
     h_4_2->prev = h_n_4;
     h_4_2->face = f2_4;
     e4_n->halfedge=h_n_4;
-    e3_n->halfedge=h_n_3;
     e2_n->halfedge=h_n_2;
-    h_1_n->next=h_3_1;
-    h_3_1->prev=h_1_n;
-    h_2_3->next=h_n_2;
+    h_1_n->next=h_n_2;
+    h_1_n->inv=h_n_1;
     h_2_3->prev=h_n_2;
-    h_n_2->set_neighbors(h_2_3,h_2_3,h_2_n,v_new,e2_n,f1_3);
+    h_n_2->set_neighbors(h_2_3,h_1_n,h_2_n,v_new,e2_n,f1_3);
     f1_3->halfedge=h_3_1;
-    h_2_3->edge=e2_n;
     e->halfedge=h_1_n;
+    logger->trace("h_1_n->id:{},h_n_1->id:{},h_n_2->id:{},h_2_n->id:{},h_n_4->id:{},h_4_2->id:{},h_4_n->id:{},h_1_4->id:{},h_2_3->id:{},h_3_1->id:{}", h_1_n->id,h_n_1->id,h_n_2->id,h_2_n->id,h_n_4->id,h_4_2->id,h_4_n->id,h_1_4->id,h_2_3->id,h_3_1->id);
+    logger->trace("e1_n->id:{},e2_n->id:{},e4_n->id:{},e2_3->id:{}", e->id,e2_n->id,e4_n->id,h_2_3->edge->id);
+    optional<HalfedgeMeshFailure> check_result = validate();
+    if (check_result.has_value()) {
+        return std::nullopt;}
     return v_new;
     }
+    Edge* e3_n = new_edge();
+    Halfedge* h_3_n = new_halfedge();
+    Halfedge* h_n_3 = new_halfedge();
+    Face* f2_3 = new_face();
     e->halfedge=h_1_n;
     h_1_n->set_neighbors(h_n_3,h_3_1,h_n_1,v1,e,f1_3);
     h_3_1->prev = h_n_3;
@@ -248,12 +254,15 @@ optional<Vertex*> HalfedgeMesh::collapse_edge(Edge* e)
     Halfedge* h1=h->prev->inv;
     Halfedge* h2=h_inv->prev->inv;
     logger->trace("---h->id:{},h_inv->id:{},h_inv1->id:{},h_inv2->id:{},h1->id:{},h2->id:{}", h->id,h_inv->id,h_inv1->id,h_inv2->id,h1->id,h2->id);
+    logger->trace("h->prev->id:{},h->next->id:{},h_inv->prev->id:{},h_inv->next->id:{}", h->prev->id,h->next->id,h_inv->prev->id,h_inv->next->id);
+    logger->trace("h->edge->id:{},h1->edge->id:{},h2->edge->id:{},h_inv1->edge->id:{},h_inv2->edge->id:{}", h->edge->id,h1->edge->id,h2->edge->id,h_inv1->edge->id,h_inv2->edge->id);
+    logger->trace("h->from->id:{},h->next->inv->from->id:{},h->prev->from->id:{}",h->from->id,h->next->inv->from->id,h->prev->from->id);
     h_inv2->from->halfedge=h_inv2;
     h_inv1->from->halfedge=h_inv1;
     h2->edge->halfedge=h2;
     h1->edge->halfedge=h1;
     h_inv2->edge=h2->edge;
-    h_inv1->edge=h1->edge;
+    
     v_new->pos=(h->from->pos+h_inv->from->pos)/2.0f;
     v_new->halfedge=h2;
     h2->inv=h_inv2;
@@ -268,7 +277,7 @@ optional<Vertex*> HalfedgeMesh::collapse_edge(Edge* e)
     h1->inv=h_inv1;
 
     h_inv1->inv=h1;
-    
+    h_inv1->edge=h1->edge;
     erase(h->from);
     erase(h_inv->from);
     erase(h->next->edge);
@@ -291,8 +300,9 @@ optional<Vertex*> HalfedgeMesh::collapse_edge(Edge* e)
     erase(h_inv->next->edge);
     erase(h_inv->next);
     erase(h_inv->prev);
-    erase(h_inv->edge);
+    erase(h->edge);
     erase(h_inv->face);
+    erase(h);
     erase(h_inv);
     }
     optional<HalfedgeMeshFailure> check_result = validate();
