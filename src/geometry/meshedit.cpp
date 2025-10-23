@@ -191,9 +191,7 @@ optional<Vertex*> HalfedgeMesh::split_edge(Edge* e)
     e->halfedge=h_1_n;
     logger->trace("h_1_n->id:{},h_n_1->id:{},h_n_2->id:{},h_2_n->id:{},h_n_4->id:{},h_4_2->id:{},h_4_n->id:{},h_1_4->id:{},h_2_3->id:{},h_3_1->id:{}", h_1_n->id,h_n_1->id,h_n_2->id,h_2_n->id,h_n_4->id,h_4_2->id,h_4_n->id,h_1_4->id,h_2_3->id,h_3_1->id);
     logger->trace("e1_n->id:{},e2_n->id:{},e4_n->id:{},e2_3->id:{}", e->id,e2_n->id,e4_n->id,h_2_3->edge->id);
-    optional<HalfedgeMeshFailure> check_result = validate();
-    if (check_result.has_value()) {
-        return std::nullopt;}
+
     return v_new;
     }
     Edge* e3_n = new_edge();
@@ -230,10 +228,7 @@ optional<Vertex*> HalfedgeMesh::split_edge(Edge* e)
     //更新面片的半边
     f2_4->halfedge = h_4_2;
     f2_3->halfedge = h_2_3;
-    optional<HalfedgeMeshFailure> check_result = validate();
-    if (check_result.has_value()) {
-    return std::nullopt;
-    }
+
     return v_new;
 }
 
@@ -361,7 +356,7 @@ void HalfedgeMesh::loop_subdivide()
         v->is_new = false; // Mark as old vertex
         }
     }
-     check_result = validate();
+    check_result = validate();
     if (check_result.has_value()) {
         return;
     }
@@ -432,6 +427,10 @@ void HalfedgeMesh::loop_subdivide()
         }
     }
     logger->info("---end splitting edges---");
+    check_result = validate();
+    if (check_result.has_value()) {
+        return;
+    }
     // Now flip any new edge that connects an old and new vertex.
     logger->info("---begin flipping edges---");
     for (Edge* e = edges.head; e != nullptr; e = e->next_node){
@@ -448,6 +447,10 @@ void HalfedgeMesh::loop_subdivide()
         }
     }
     logger->info("---end flipping edges---");
+    check_result = validate();
+    if (check_result.has_value()) {
+        return;
+    }
     // Finally, copy new vertex positions into the Vertex::pos.
     logger->info("---begin copying new vertex positions into old vertices---");
     for(Vertex* v = vertices.head; v != nullptr; v = v->next_node){
