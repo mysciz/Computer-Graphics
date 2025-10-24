@@ -220,7 +220,7 @@ void Toolbar::layout_mode(Scene& scene)
             Eigen::Quaternionf qz = Eigen::Quaternionf(cz, 0, 0, sz);
 
             // 计算最终的旋转四元数
-            Eigen::Quaternionf q_final = qz * qy * qx;
+            Eigen::Quaternionf q_final = qx * qy * qz;
 
             // 应用旋转到对象
             selected_object->rotation = q_final;

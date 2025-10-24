@@ -338,8 +338,10 @@ void HalfedgeMesh::loop_subdivide()
         Halfedge* h = v->halfedge;
         Halfedge* next_h = h->inv->next;
         v->new_pos = (3.0f/4.0f)*v->pos;
+        if(h->edge->on_boundary())
+        v->new_pos += (1.0f/8.0f)*h->inv->from->pos;
         while(next_h!= h){
-            if(h->edge->on_boundary()){
+            if(next_h->edge->on_boundary()){
                 v->new_pos += (1.0f/8.0f)*next_h->inv->from->pos;
                 is_boundary=true;
             }
@@ -439,7 +441,7 @@ void HalfedgeMesh::loop_subdivide()
             Vertex* v1 = e->halfedge->from;
             Vertex* v2 = e->halfedge->inv->from;
             if ((!v1->is_new && v2->is_new) || (v1->is_new && !v2->is_new)) {
-                optional<Edge*>flipped_edge =flip_edge(e);      
+                flip_edge(e);      
             }
         }
         if(e->next_node==nullptr){
