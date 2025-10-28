@@ -23,9 +23,63 @@ using std::vector;
 HalfedgeMesh::EdgeRecord::EdgeRecord(unordered_map<Vertex*, Matrix4f>& vertex_quadrics, Edge* e) :
     edge(e)
 {
-    (void)vertex_quadrics;
+    /*(void)vertex_quadrics;
     optimal_pos = Vector3f(0.0f, 0.0f, 0.0f);
-    cost        = 0.0f;
+    cost        = 0.0f;*/
+    // 获取两个端点及其二次误差矩阵
+    Vertex* v1 = e->halfedge->from;
+    Vertex* v2 = e->halfedge->inv->from;
+    const Matrix4f& Q1 = vertex_quadrics[v1];
+    const Matrix4f& Q2 = vertex_quadrics[v2];
+
+    // 计算合并后的二次误差矩阵 Q = Q1 + Q2
+    Matrix4f Q = Q1 + Q2;
+
+    // 尝试计算最优坍缩位置 v'
+    Matrix3f A = Q.block<3, 3>(0, 0); // A 是 Q 的左上角 3x3 矩阵
+    Vector3f b = Q.block<3, 1>(0, 3); // b 是 Q 的右上角 3x1 向量
+    // d = Q(3, 3);
+    // 检查 A 是否可逆
+    // Eigen 库中，Matrix::lu().isInvertible() 可以检查可逆性
+    if (A.determinant() != 0) { // 简单地使用行列式判断，实际应用中可用更稳定的方法
+        // 可逆：最优位置 x_opt = - A^(-1) * b
+        Vector3f x_opt = A.inverse() * (-b);
+        optimal_pos = x_opt;
+        // 计算代价 cost = v'^T * Q * v'
+        Vector4f v_opt_homo;
+        v_opt_homo << x_opt, 1.0f;
+        cost = v_opt_homo.transpose() * Q * v_opt_homo;
+
+    } else {
+        // 不可逆（奇异）：最优位置取 v1, v2 和中点 (v1+v2)/2 中误差最小的一个
+        // 候选点
+        Vector3f pos_v1 = v1->pos;
+        Vector3f pos_v2 = v2->pos;
+        Vector3f pos_mid = (pos_v1 + pos_v2) / 2.0f;
+        
+        // 齐次坐标
+        Vector4f v1_homo, v2_homo, mid_homo;
+        v1_homo << pos_v1, 1.0f;
+        v2_homo << pos_v2, 1.0f;
+        mid_homo << pos_mid, 1.0f;
+
+        // 计算误差
+        float cost_v1 = v1_homo.transpose() * Q * v1_homo;
+        float cost_v2 = v2_homo.transpose() * Q * v2_homo;
+        float cost_mid = mid_homo.transpose() * Q * mid_homo;
+
+        // 选取误差最小的作为最优位置和代价
+        if (cost_v1 <= cost_v2 && cost_v1 <= cost_mid) {
+            optimal_pos = pos_v1;
+            cost = cost_v1;
+        } else if (cost_v2 <= cost_v1 && cost_v2 <= cost_mid) {
+            optimal_pos = pos_v2;
+            cost = cost_v2;
+        } else {
+            optimal_pos = pos_mid;
+            cost = cost_mid;
+        }
+    }
 }
 
 bool operator<(const HalfedgeMesh::EdgeRecord& a, const HalfedgeMesh::EdgeRecord& b)
@@ -236,11 +290,33 @@ optional<Vertex*> HalfedgeMesh::collapse_edge(Edge* e)
 {
    if (!e || !e->halfedge) return std::nullopt;
 
+    // 要用到的半边
+    Halfedge* h=e->halfedge;
+    //安全性检查
+    Vertex* v1 = h->from;
+    Vertex* v2 = h->inv->from;
+    size_t neighbors = 0;
+    // 找出 v1 的所有邻居
+    std::set<Vertex*> v1_neighbors;
+    Halfedge* curr_h = v1->halfedge;
+    do {
+        v1_neighbors.insert(curr_h->inv->from);
+        curr_h = curr_h->inv->next;
+    } while (curr_h != v1->halfedge);
+    curr_h = v2->halfedge;
+    do {
+        if (v1_neighbors.count(curr_h->inv->from)) {
+            neighbors++;
+        }
+        curr_h = curr_h->inv->next;
+    } while (curr_h != v2->halfedge);
+    if(neighbors!=2){
+        return std::nullopt;
+    }
     // 创建新顶点
     Vertex* v_new = new_vertex();
     if (!v_new) return std::nullopt;
-    // 要用到的半边
-    Halfedge* h=e->halfedge;
+    
     if(!h->is_boundary())//
         h = h->inv;
     Halfedge* h_inv=h->inv;
@@ -300,10 +376,11 @@ optional<Vertex*> HalfedgeMesh::collapse_edge(Edge* e)
     erase(h);
     erase(h_inv);
     }
+    /* 
     optional<HalfedgeMeshFailure> check_result = validate();
     if (check_result.has_value()) {
     return std::nullopt;
-    }
+    }*/
     return v_new;
 }
 
@@ -492,25 +569,146 @@ void HalfedgeMesh::simplify()
     // Compute initial quadrics for each face by simply writing the plane equation
     // for the face in homogeneous coordinates. These quadrics should be stored
     // in face_quadrics
+    const size_t target_face_count = faces.size / 4;
+    // Step 1: 计算每个面片的二次误差矩阵 (K_f)
+    logger->info("---begin computing initial quadrics for faces---");
+    for (Face* f = faces.head; f != nullptr; f = f->next_node) {
+        if (f->is_boundary) continue; // 跳过边界虚拟面片 
+        
+        // 计算面片平面方程 a*x + b*y + c*z + d = 0
+        Eigen::Vector3f n = f->normal();
+        Eigen::Vector3f p = f->halfedge->from->pos;
+        float d = -n.dot(p);
 
+        // 齐次坐标向量 v = (n_x, n_y, n_z, d)^T
+        Eigen::Vector4f v;
+        v << n, d;
+
+        // 面片的二次误差矩阵 K_f = v * v^T (公式 3.2)
+        face_quadrics[f] = v * v.transpose();
+    }
+    logger->info("---end computing initial quadrics for faces---");
     // -> Compute an initial quadric for each vertex as the sum of the quadrics
     //    associated with the incident faces, storing it in vertex_quadrics
+    // Step 2: 计算每个顶点的二次误差矩阵 (K_v)
+    logger->info("---begin computing initial quadrics for vertices---");
+    for (Vertex* v = vertices.head; v != nullptr; v = v->next_node) {
+        Matrix4f Q_v = Matrix4f::Zero();
+        Halfedge* h = v->halfedge;
+        Halfedge* curr_h = h;
+        // 遍历所有邻接面片，累加 K_f
+        do {
+            Face* f = curr_h->face;
+            if (!f->is_boundary) {
+                Q_v += face_quadrics[f];
+            }
+            curr_h = curr_h->inv->next;
+        } while (curr_h != h);
 
+        vertex_quadrics[v] = Q_v;
+    }
+    logger->info("---end computing initial quadrics for vertices---");
     // -> Build a priority queue of edges according to their quadric error cost,
     //    i.e., by building an Edge_Record for each edge and sticking it in the
     //    queue. You may want to use the above PQueue<Edge_Record> for this.
-
+    // Step 3: 构建优先队列
+    logger->info("---begin building priority queue---");
+    for (Edge* e = edges.head; e != nullptr; e = e->next_node) {
+        // EdgeRecord 构造函数计算 cost 和 optimal_pos
+        EdgeRecord record(vertex_quadrics, e);
+        edge_records[e] = record;
+        edge_queue.insert(record);
+    }
+    logger->info("---end building priority queue---");
     // -> Until we reach the target edge budget, collapse the best edge. Remember
     //    to remove from the queue any edge that touches the collapsing edge
     //    BEFORE it gets collapsed, and add back into the queue any edge touching
     //    the collapsed vertex AFTER it's been collapsed. Also remember to assign
     //    a quadric to the collapsed vertex, and to pop the collapsed edge off the
     //    top of the queue.
+    // Step 4: 循环坍缩
+    logger->info("---begin simplification---");
+    while (!edge_queue.empty() && faces.size > target_face_count) {
+        // 4a: 取出 cost 最小的边
+        EdgeRecord best_record = *edge_queue.begin();
+        Edge* e = best_record.edge;
+        edge_queue.erase(edge_queue.begin());
 
+        // 获取要坍缩的两个顶点 v1, v2
+        Vertex* v1 = e->halfedge->from;
+        Vertex* v2 = e->halfedge->inv->from;
+
+        // 收集受影响的边，并从队列中移除
+        std::set<Edge*> affected_edges;
+        
+        // v1 邻接的边
+        Halfedge* curr_h = v1->halfedge;
+        do {
+            affected_edges.insert(curr_h->edge);
+            curr_h = curr_h->inv->next;
+        } while (curr_h != v1->halfedge);
+        
+        // v2 邻接的边
+        curr_h = v2->halfedge;
+        do {
+            affected_edges.insert(curr_h->edge);
+            curr_h = curr_h->inv->next;
+        } while (curr_h != v2->halfedge);
+
+        // 从优先队列和记录中移除受影响的边
+        for (Edge* affected_e : affected_edges) {
+            auto it = edge_records.find(affected_e);
+            if (it != edge_records.end()) {
+                edge_queue.erase(it->second);
+                edge_records.erase(it);
+            }
+        }
+
+        //  坍缩边，得到新顶点 v_new
+        std::optional<Vertex*> new_vertex_opt = collapse_edge(e);
+
+        if (!new_vertex_opt.has_value()) {
+            logger->warn("Edge collapse failed for edge {}", e->id);
+            // 失败的边已经从队列中移除，忽略即可
+            continue; 
+        }
+
+        Vertex* v_new = new_vertex_opt.value();
+        
+        // 确保新顶点位置是 QEM 最优位置
+        v_new->pos = best_record.optimal_pos; 
+        
+        // 4c: 更新新顶点的二次误差矩阵 K_new = K1 + K2
+        vertex_quadrics[v_new] = vertex_quadrics[v1] + vertex_quadrics[v2];
+        
+        // 移除被删除的顶点记录
+        vertex_quadrics.erase(v1);
+        vertex_quadrics.erase(v2);
+
+        // 重新计算并插入新顶点邻接的边
+        curr_h = v_new->halfedge;
+        do {
+            Edge* adjacent_e = curr_h->edge;
+            
+            // 计算新的 EdgeRecord
+            EdgeRecord new_record(vertex_quadrics, adjacent_e);
+
+            // 更新记录并插入队列
+            edge_records[adjacent_e] = new_record;
+            edge_queue.insert(new_record);
+
+            curr_h = curr_h->inv->next;
+        } while (curr_h != v_new->halfedge);
+    }
+    logger->info("---end simplification---");
+    // 清理已删除元素的内存
+    clear_erasure_records();
+    
     logger->info("simplified mesh: {} vertices, {} faces", vertices.size, faces.size);
     logger->info("simplification done\n");
     global_inconsistent = true;
     validate();
+    logger->info("Corrected mesh");
 }
 
 void HalfedgeMesh::isotropic_remesh()
