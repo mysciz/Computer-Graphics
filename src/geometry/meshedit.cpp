@@ -767,7 +767,6 @@ void HalfedgeMesh::isotropic_remesh()
             Edge* e=*it;
             // 检查是否满足坍缩长度条件
             if (e->length() < COLLAPSE_THRESHOLD) {
-                logger->info("---begin Collapse Check---");
                 // --- 坍缩后的防冲突检查：邻边长度不得大于 4/3 L ---
                 Vertex* v1 = e->halfedge->from;
                 Vertex* v2 = e->halfedge->inv->from;
@@ -781,18 +780,14 @@ void HalfedgeMesh::isotropic_remesh()
                 // 辅助函数：将一个顶点的邻居（非 v_exclude）加入集合
                 auto gather_neighbors = [&](Vertex* v_center, Vertex* v_exclude) {
                     Halfedge* h_start = v_center->halfedge;
-                    logger->trace("h_start->id:{}",h_start->id);
                     Halfedge* h_curr = h_start->inv->next;
                     while (h_curr != h_start) {
-                        logger->trace("h_curr = {}", h_curr->id);
-                        logger->trace("h_start->id:{}",h_start->id);
                         Vertex* neighbor = h_curr->inv->from;
                         if (neighbor != v_exclude && neighbor != v_center) {
                             N_new.insert(neighbor);
                         }
                         h_curr = h_curr->inv->next;
                     }
-                    logger->trace("gather_neighbors done");
                 };
                 gather_neighbors(v1, v2);
                 gather_neighbors(v2, v1);
@@ -808,15 +803,13 @@ void HalfedgeMesh::isotropic_remesh()
                 }
 
                 if (will_cause_long_edge) {
-                    logger->trace("Edge collapse will cause long edge, skip.");
                     ++it;
                     continue; // 放弃坍缩这条边
                 }
                 // --- 坍缩后的防冲突检查结束 ---
-
                 // 如果通过检查，执行坍缩
                 logger->trace("Successfully collapsed edge {}.", e->id);
-                
+                //重点 移除被塌陷边 避免循环崩溃
                 selected_edges.erase(e->halfedge->next->edge);
                 selected_edges.erase(e->halfedge->inv->next->edge);
                 it=selected_edges.erase(it);

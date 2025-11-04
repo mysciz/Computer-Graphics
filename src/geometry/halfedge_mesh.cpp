@@ -463,7 +463,6 @@ void HalfedgeMesh::clear_erasure_records()
 
 optional<HalfedgeMeshFailure> HalfedgeMesh::validate()
 {
-    logger->trace("validate halfedge mesh");
     for (Vertex* v = vertices.head; v != nullptr; v = v->next_node) {
         bool is_finite =
             std::isfinite(v->pos.x()) && std::isfinite(v->pos.y()) && std::isfinite(v->pos.z());
@@ -477,7 +476,6 @@ optional<HalfedgeMeshFailure> HalfedgeMesh::validate()
     unordered_map<Edge*, set<Halfedge*>>   e_accessible;
     unordered_map<Face*, set<Halfedge*>>   f_accessible;
     set<Halfedge*>                         permutation_next, permutation_prev;
-    logger->trace("build halfedge connectivity information");
     // Check valid halfedge permutation
     for (Halfedge* h = halfedges.head; h != nullptr; h = h->next_node) {
         if (erased_halfedges.find(h->id) != erased_halfedges.end()) {
@@ -523,7 +521,6 @@ optional<HalfedgeMeshFailure> HalfedgeMesh::validate()
             return HalfedgeMeshFailure::INVALID_HALFEDGE_PERMUTATION;
         }
     }
-    logger->trace("halfedge connectivity information is built");
     // Check whether each halfedge incident on a vertex points to that vertex
     for (Vertex* v = vertices.head; v != nullptr; v = v->next_node) {
         if (erased_vertices.find(v->id) != erased_vertices.end()) {
@@ -548,7 +545,6 @@ optional<HalfedgeMeshFailure> HalfedgeMesh::validate()
         } while (h != v->halfedge);
         v_accessible[v] = std::move(accessible);
     }
-    logger->trace("vertex connectivity information is built");
     // Check whether each halfedge incident on an edge points to that edge
     for (Edge* e = edges.head; e != nullptr; e = e->next_node) {
         if (erased_edges.find(e->id) != erased_edges.end()) {
@@ -573,7 +569,6 @@ optional<HalfedgeMeshFailure> HalfedgeMesh::validate()
         } while (h != e->halfedge);
         e_accessible[e] = std::move(accessible);
     }
-    logger->trace("edge connectivity information is built");
     // Check whether each halfedge incident on an face points to that face
     for (Face* f = faces.head; f != nullptr; f = f->next_node) {
         if (erased_faces.find(f->id) != erased_faces.end()) {
@@ -598,7 +593,6 @@ optional<HalfedgeMeshFailure> HalfedgeMesh::validate()
         } while (h != f->halfedge);
         f_accessible[f] = std::move(accessible);
     }
-    logger->trace("face connectivity information is built");
     for (Halfedge* h = halfedges.head; h != nullptr; h = h->next_node) {
         if (erased_halfedges.find(h->id) != erased_halfedges.end()) {
             // This halfedge has been erased, do not check it
@@ -642,7 +636,6 @@ optional<HalfedgeMeshFailure> HalfedgeMesh::validate()
             return HalfedgeMeshFailure::POOR_HALFEDGE_ACCESSIBILITY;
         }
     }
-    logger->trace("halfedge mesh is valid");
     clear_erasure_records();
     return std::nullopt;
 }
