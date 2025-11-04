@@ -722,7 +722,16 @@ void HalfedgeMesh::isotropic_remesh()
     );
     logger->info("original mesh: {} vertices, {} faces", vertices.size, faces.size);
     // Compute the mean edge length.
-
+    float total_length = 0.0f;
+    for (Edge* e = edges.head; e != nullptr; e = e->next_node) {
+    total_length += e->length();
+    }
+    const size_t num_edges = edges.size;
+    const float L = total_length / (float)num_edges;
+    logger->info("Mean edge length L = {:.4f}", L);
+    // 设置分裂和坍缩阈值
+    const float SPLIT_THRESHOLD = 4.0f / 3.0f * L;  // 分裂长度 > 4/3 L
+    const float COLLAPSE_THRESHOLD = 4.0f / 5.0f * L; // 坍缩长度 < 4/5 L
     // Repeat the four main steps for 5 or 6 iterations
     // -> Split edges much longer than the target length (being careful about
     //    how the loop is written!)
@@ -734,13 +743,152 @@ void HalfedgeMesh::isotropic_remesh()
     static const size_t iteration_limit = 5;
     set<Edge*>          selected_edges;
     for (size_t i = 0; i != iteration_limit; ++i) {
+        logger->info("Isotropic Remeshing Iteration {}/{}", i + 1, iteration_limit);
+        logger->info("---begin Split---");
         // Split long edges.
-
+        for (Edge* e = edges.head; e != nullptr; e = e->next_node) {
+            selected_edges.insert(e);
+        }
+        for (Edge* e : selected_edges) {
+            // 检查边是否仍然存在，且长度大于分裂阈值
+            if (e->length() > SPLIT_THRESHOLD) {
+                // split_edge 会自动检查是否是三角形面片以及边界情况
+                split_edge(e); 
+            }
+        }
+        logger->info("---begin Collapse---");
         // Collapse short edges.
+        selected_edges.clear();
+        for (Edge* e = edges.head; e != nullptr; e = e->next_node) {
+            selected_edges.insert(e);
+        }
+        auto it =selected_edges.begin();
+        while(it!= selected_edges.end()) {
+            Edge* e=*it;
+            // 检查是否满足坍缩长度条件
+            if (e->length() < COLLAPSE_THRESHOLD) {
+                logger->info("---begin Collapse Check---");
+                // --- 坍缩后的防冲突检查：邻边长度不得大于 4/3 L ---
+                Vertex* v1 = e->halfedge->from;
+                Vertex* v2 = e->halfedge->inv->from;
+                
+                // 坍缩位置
+                Eigen::Vector3f p_new = (v1->pos + v2->pos) / 2.0f; 
+                
+                // 找到 v1 和 v2 邻域中所有非共用的顶点 (坍缩后会成为新邻边)
+                std::set<Vertex*> N_new;
+                
+                // 辅助函数：将一个顶点的邻居（非 v_exclude）加入集合
+                auto gather_neighbors = [&](Vertex* v_center, Vertex* v_exclude) {
+                    Halfedge* h_start = v_center->halfedge;
+                    logger->trace("h_start->id:{}",h_start->id);
+                    Halfedge* h_curr = h_start->inv->next;
+                    while (h_curr != h_start) {
+                        logger->trace("h_curr = {}", h_curr->id);
+                        logger->trace("h_start->id:{}",h_start->id);
+                        Vertex* neighbor = h_curr->inv->from;
+                        if (neighbor != v_exclude && neighbor != v_center) {
+                            N_new.insert(neighbor);
+                        }
+                        h_curr = h_curr->inv->next;
+                    }
+                    logger->trace("gather_neighbors done");
+                };
+                gather_neighbors(v1, v2);
+                gather_neighbors(v2, v1);
 
+                bool will_cause_long_edge = false;
+                
+                for (Vertex* n : N_new) {
+                    float new_len = (p_new - n->pos).norm();
+                    if (new_len > SPLIT_THRESHOLD) {
+                        will_cause_long_edge = true;
+                        break;
+                    }
+                }
+
+                if (will_cause_long_edge) {
+                    logger->trace("Edge collapse will cause long edge, skip.");
+                    ++it;
+                    continue; // 放弃坍缩这条边
+                }
+                // --- 坍缩后的防冲突检查结束 ---
+
+                // 如果通过检查，执行坍缩
+                logger->trace("Successfully collapsed edge {}.", e->id);
+                
+                selected_edges.erase(e->halfedge->next->edge);
+                selected_edges.erase(e->halfedge->inv->next->edge);
+                it=selected_edges.erase(it);
+                collapse_edge(e);
+            }
+            else{++it;}
+
+        }
+        logger->info("---begin Flip---");
         // Flip edges.
+        selected_edges.clear();
+        for (Edge* e = edges.head; e != nullptr; e = e->next_node) {
+            selected_edges.insert(e);
+        }
 
+        for (Edge* e : selected_edges) {
+            if (e->halfedge == nullptr || e->on_boundary()) continue;
+
+            Halfedge* h = e->halfedge;
+            Halfedge* inv_h = h->inv;
+            
+            // 确保是三角形面 (否则翻转的拓扑结构不确定)
+            if (h->next->next->next != h || inv_h->next->next->next != inv_h) continue;
+
+            Vertex* v1 = h->from;
+            Vertex* v2 = inv_h->from;
+            Vertex* v3 = h->next->next->from;  // 对向 h 的顶点
+            Vertex* v4 = inv_h->next->next->from; // 对向 inv_h 的顶点
+
+            // 计算度数差指标 d = sum(|degree(vi) - 6|)
+            auto degree_diff = [](size_t deg) -> float {
+                return static_cast<float>(std::abs(static_cast<int>(deg) - 6));
+            };
+            
+            float d_before = degree_diff(v1->degree()) + degree_diff(v2->degree()) +
+                             degree_diff(v3->degree()) + degree_diff(v4->degree());
+
+            // 翻转后，v1, v2 的度数减 1；v3, v4 的度数加 1
+            float d_after = degree_diff(v1->degree() - 1) + degree_diff(v2->degree() - 1) +
+                            degree_diff(v3->degree() + 1) + degree_diff(v4->degree() + 1);
+            
+            // 如果翻转可以减小总的度数偏差，则执行翻转。
+            if (d_after < d_before) {
+                flip_edge(e);
+            }
+        }
+        logger->info("---begin Smoothing---");
         // Vertex averaging.
+        const float w = 1.0f / 5.0f; // 缩放因子 w = 1/5
+        for (Vertex* v=vertices.head; v!= nullptr; v = v->next_node) {
+            // 获取邻域中心 C (拉普拉斯平滑的中心)
+            Eigen::Vector3f c = v->neighborhood_center();
+            Eigen::Vector3f p = v->pos;
+            
+            // 拉普拉斯向量：v_vec = c - p
+            Eigen::Vector3f v_vec = c - p;
+            
+            // 顶点法向量 N
+            Eigen::Vector3f normal = v->normal();
+            normal.normalize(); 
+            
+            // 沿切线方向的移动向量：v_tan_move = v_vec - (v_vec . N) N
+            Eigen::Vector3f v_tan_move = v_vec - (v_vec.dot(normal)) * normal;
+            
+            // 最终的新位置：p + w * v_tan_move
+            v->new_pos = p + w * v_tan_move;
+        }
+
+        // 步骤 2: 统一更新位置
+        for (Vertex* v=vertices.head; v!= nullptr; v = v->next_node) {
+            v->pos = v->new_pos;
+        }
     }
     logger->info("remeshed mesh: {} vertices, {} faces\n", vertices.size, faces.size);
     global_inconsistent = true;
