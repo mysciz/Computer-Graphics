@@ -887,3 +887,71 @@ void HalfedgeMesh::isotropic_remesh()
     global_inconsistent = true;
     validate();
 }
+
+void HalfedgeMesh::smooth() {
+    const float lambda = 0.5f;
+
+    // 阶段 1: 计算新的目标位置 (v') 并存储在 v->new_pos 中
+    for (Vertex* v=vertices.head; v!= nullptr; v = v->next_node) {
+        // --- 边界识别和邻居查找
+        bool is_boundary = false;
+        Halfedge* start_h = v->halfedge;
+        Halfedge* current_h = start_h;
+        
+        do {
+            if (current_h->face->is_boundary) {
+                is_boundary = true;
+                break;
+            }
+            current_h = current_h->inv->next;
+        } while (current_h != start_h);
+        if(is_boundary){
+        v->new_pos = v->pos;
+        continue;
+        }
+        // 计算 3D Cotangent 权重位移 (Δv_3D) 
+        Eigen::Vector3f weighted_sum_neighbors = Eigen::Vector3f::Zero();
+        float total_weight = 0.0f;
+        current_h = start_h;
+        do {
+            Vertex* vj = current_h->inv->from;
+            float cot_alpha = 0.0f;
+            float cot_beta = 0.0f;
+            // --- Cotangent 权重计算  ---
+            // 计算 cot α
+            Vertex* vk_alpha = current_h->next->next->from; 
+            Eigen::Vector3f a = v->pos - vk_alpha->pos;
+            Eigen::Vector3f b = vj->pos - vk_alpha->pos;
+            float dot_prod = a.dot(b);
+            float cross_prod = a.cross(b).norm();
+            cot_alpha = dot_prod / cross_prod;
+            Vertex* vk_beta = current_h->inv->next->next->from; 
+            Eigen::Vector3f a_beta = vj->pos - vk_beta->pos;
+            Eigen::Vector3f b_beta = v->pos - vk_beta->pos;
+            dot_prod = a_beta.dot(b_beta);
+            cross_prod = a_beta.cross(b_beta).norm();
+            cot_beta =a_beta.dot(b_beta) / cross_prod;
+        
+            float wj = 0.5f * (cot_alpha + cot_beta);
+            weighted_sum_neighbors += wj * vj->pos;
+            total_weight += wj;
+            current_h = current_h->inv->next;
+        } while (current_h != start_h);
+
+        Eigen::Vector3f delta_v_3D = Eigen::Vector3f::Zero();
+        delta_v_3D = (weighted_sum_neighbors / total_weight) - v->pos;
+        if (is_boundary) {
+            v->new_pos = v->pos;
+        } else {
+            v->new_pos = v->pos + lambda * delta_v_3D;
+        }
+    }
+    // 阶段 2: 同步更新所有顶点的位置
+    for (Vertex* v=vertices.head; v!= nullptr; v = v->next_node) {
+        if (v->halfedge == nullptr) continue;
+        v->pos = v->new_pos;
+    }
+
+    global_inconsistent = true;
+    logger->info("Laplacian smoothing iteration completed with tangent-space boundary constraint.");
+}

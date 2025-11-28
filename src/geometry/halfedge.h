@@ -302,6 +302,9 @@ public:
      * 各向同性重网格化只能应用于三角形网格。
      */
     void isotropic_remesh();
+    /*! \~chinese 拉普拉斯平滑 */
+    void smooth();
+    
     /*! \~chinese 所有半边。 */
     LinkedList<Halfedge> halfedges;
     /*! \~chinese 所有顶点。 */

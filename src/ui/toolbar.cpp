@@ -368,7 +368,10 @@ void Toolbar::model_mode(Scene& scene)
         if (ImGui::Button("Isotropic Remesh")) {
             scene.halfedge_mesh->isotropic_remesh();
         }
-
+        ImGui::SameLine();
+        if(ImGui::Button("Smooth")){
+            scene.halfedge_mesh->smooth();
+        }
         ImGui::EndTabItem();
     }
 }
