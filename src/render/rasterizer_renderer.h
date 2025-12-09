@@ -28,7 +28,8 @@ public:
      * \param positions 顶点位置坐标
      * \param normals 顶点法线向量
      */
-    void input_vertices(const Eigen::Vector4f& positions, const Eigen::Vector3f& normals);
+    void input_vertices(const Eigen::Vector4f& positions, const Eigen::Vector3f& normals, 
+                       int triangle_id, int vertex_in_triangle);
     
     /*!
      * \~chinese
@@ -49,10 +50,14 @@ public:
     void worker_thread();
 
 private:
-    /*! \~chinese 存储待着色顶点数据的队列 */
-    std::queue<VertexShaderPayload> vertex_queue;
+    /*! \~chinese 存储待着色顶点数据的队列，包含三角形ID和顶点位置信息 */
+    std::queue<std::tuple<VertexShaderPayload, int, int>> vertex_queue;
     /*! \~chinese 保护顶点队列的互斥锁 */
-    std::mutex                      queue_mutex;
+    std::mutex queue_mutex;
+    /*! \~chinese 用于按三角形分组存储处理后的顶点 */
+    std::map<int, std::array<VertexShaderPayload, 3>> processed_triangles;
+    /*! \~chinese 保护已处理三角形映射的互斥锁 */
+    std::mutex triangles_mutex;
 };
 
 /*!

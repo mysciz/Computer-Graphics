@@ -10,7 +10,7 @@
 #include <spdlog/spdlog.h>
 
 #include "../scene/scene.h"
-
+#include "triangle.h"
 /*!
  * \file render/graphics_interface.h
  * \ingroup rendering

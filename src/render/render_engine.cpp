@@ -15,8 +15,12 @@ RenderEngine::RenderEngine()
 // choose render type
 void RenderEngine::render(Scene& scene, RendererType type)
 {
+    //分配线程数
     switch (type) {
-    case RendererType::RASTERIZER: rasterizer_render->render(scene); break;
+    case RendererType::RASTERIZER: 
+    rasterizer_render->setnum(n_threads);
+    rasterizer_render->render(scene);
+    break;
     // case RendererType::RASTERIZER_MT: rasterizer_render->render_mt(scene); break;
     case RendererType::WHITTED_STYLE: whitted_render->render(scene); break;
     default: break;

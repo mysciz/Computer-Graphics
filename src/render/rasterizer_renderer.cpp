@@ -64,7 +64,20 @@ RasterizerRenderer::RasterizerRenderer(
 {
     logger = get_logger("Rasterizer Renderer");
 }
-
+void RasterizerRenderer::setnum(int num)
+{   num--;
+    if(num<6){
+        n_vertex_threads=num/3;
+        n_fragment_threads=num/3;
+        n_rasterizer_threads=num-2*num/3;
+    }
+    else{
+        n_vertex_threads=4;
+        n_fragment_threads=1;
+        n_rasterizer_threads=1;
+    }
+    return;
+}
 // 光栅化渲染器的渲染调用接口
 void RasterizerRenderer::render(const Scene& scene)
 {
@@ -79,7 +92,8 @@ void RasterizerRenderer::render(const Scene& scene)
     Camera     cam                         = scene.camera;
     vertex_processor.vertex_shader_ptr     = vertex_shader;
     fragment_processor.fragment_shader_ptr = phong_fragment_shader;
-    for (const auto& group: scene.groups) {
+    logger->info("n_vertex_threads: {}, n_rasterizer_threads: {}, n_fragment_threads: {}",n_vertex_threads,n_rasterizer_threads,n_fragment_threads);
+     for (const auto& group: scene.groups) {
         for (const auto& object: group->objects) {
             Context::vertex_finish     = false;
             Context::rasterizer_finish = false;
@@ -101,10 +115,9 @@ void RasterizerRenderer::render(const Scene& scene)
             Uniforms::inv_trans_M = object->model().inverse().transpose();
             Uniforms::width       = static_cast<int>(this->width);
             Uniforms::height      = static_cast<int>(this->height);
-            // To do: 同步
-            Uniforms::material = object->mesh.material;
-            Uniforms::lights   = scene.lights;
-            Uniforms::camera   = scene.camera;
+            Uniforms::material    = object->mesh.material;
+            Uniforms::lights      = scene.lights;
+            Uniforms::camera      = scene.camera;
 
             // input object->mesh's vertices & faces & normals data
             const std::vector<float>&        vertices  = object->mesh.vertices.data;
@@ -112,21 +125,30 @@ void RasterizerRenderer::render(const Scene& scene)
             const std::vector<float>&        normals   = object->mesh.normals.data;
             size_t                           num_faces = faces.size();
 
-            // process vertices
+            // process vertices - 按三角形输入，保持顺序
+            int triangle_id = 0;
             for (size_t i = 0; i < num_faces; i += 3) {
-                for (size_t j = 0; j < 3; j++) {
+                for (int j = 0; j < 3; j++) {  // 改为 int
                     size_t idx = faces[i + j];
                     vertex_processor.input_vertices(
                         Vector4f(
                             vertices[3 * idx], vertices[3 * idx + 1], vertices[3 * idx + 2], 1.0f
                         ),
-                        Vector3f(normals[3 * idx], normals[3 * idx + 1], normals[3 * idx + 2])
+                        Vector3f(normals[3 * idx], normals[3 * idx + 1], normals[3 * idx + 2]),
+                        triangle_id,  // 三角形ID
+                        j             // 顶点在三角形中的位置(0,1,2)
                     );
                 }
+                triangle_id++;
             }
-            vertex_processor.input_vertices(
-                Eigen::Vector4f(0, 0, 0, -1.0f), Eigen::Vector3f::Zero()
-            );
+            
+            // 发送结束信号给所有顶点处理线程
+            for (int i = 0; i < n_vertex_threads; ++i) {
+                vertex_processor.input_vertices(
+                    Eigen::Vector4f(0, 0, 0, -1.0f), Eigen::Vector3f::Zero(), -1, -1
+                );
+            }
+            
             for (auto& worker: workers) {
                 if (worker.joinable()) {
                     worker.join();
@@ -153,38 +175,71 @@ void RasterizerRenderer::render(const Scene& scene)
     }
 }
 
-void VertexProcessor::input_vertices(const Vector4f& positions, const Vector3f& normals)
+void VertexProcessor::input_vertices(const Eigen::Vector4f& positions, const Eigen::Vector3f& normals, 
+                                   int triangle_id, int vertex_in_triangle)
 {
     std::unique_lock<std::mutex> lock(queue_mutex);
-    VertexShaderPayload          payload;
+    VertexShaderPayload payload;
     payload.world_position = positions;
-    payload.normal         = normals;
-    vertex_queue.push(payload);
+    payload.normal = normals;
+    vertex_queue.push(std::make_tuple(payload, triangle_id, vertex_in_triangle));
 }
+
 
 void VertexProcessor::worker_thread()
 {
     while (!Context::vertex_finish) {
-        VertexShaderPayload payload;
+        std::tuple<VertexShaderPayload, int, int> payload_with_info;
         {
             if (vertex_queue.empty()) {
+                std::this_thread::yield();
                 continue;
             }
             std::unique_lock<std::mutex> lock(queue_mutex);
             if (vertex_queue.empty()) {
                 continue;
             }
-            payload = vertex_queue.front();
+            payload_with_info = vertex_queue.front();
             vertex_queue.pop();
         }
+        
+        auto& payload = std::get<0>(payload_with_info);
+        int triangle_id = std::get<1>(payload_with_info);
+        int vertex_in_triangle = std::get<2>(payload_with_info);
+        
+        // 检查结束信号
         if (payload.world_position.w() == -1.0f) {
             Context::vertex_finish = true;
             return;
         }
+        
+        // 执行顶点着色器
         VertexShaderPayload output_payload = vertex_shader_ptr(payload);
+        
+        // 按三角形分组存储处理后的顶点
         {
-            std::unique_lock<std::mutex> lock(Context::vertex_queue_mutex);
-            Context::vertex_shader_output_queue.push(output_payload);
+            std::unique_lock<std::mutex> lock(triangles_mutex);
+            processed_triangles[triangle_id][vertex_in_triangle] = output_payload;
+            
+            // 检查是否收集齐一个三角形的三个顶点
+            auto& triangle_vertices = processed_triangles[triangle_id];
+            bool triangle_complete = true;
+            for (int i = 0; i < 3; i++) {
+                if (triangle_vertices[i].world_position.w() == 0) {
+                    triangle_complete = false;
+                    break;
+                }
+            }
+            
+            if (triangle_complete) {
+                // 按顺序将三个顶点推送到输出队列
+                std::unique_lock<std::mutex> output_lock(Context::vertex_queue_mutex);
+                for (int i = 0; i < 3; i++) {
+                    Context::vertex_shader_output_queue.push(triangle_vertices[i]);
+                }
+                // 移除已处理的三角形
+                processed_triangles.erase(triangle_id);
+            }
         }
     }
 }

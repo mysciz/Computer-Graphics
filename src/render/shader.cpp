@@ -26,7 +26,7 @@ VertexShaderPayload vertex_shader(const VertexShaderPayload& payload)
     output_payload.viewport_position.x() = (ndc_position.x() + 1.0f) * 0.5f * Uniforms::width;
     output_payload.viewport_position.y() = (ndc_position.y() + 1.0f) * 0.5f * Uniforms::height;
     output_payload.viewport_position.z() = ndc_position.z();
-    output_payload.viewport_position.w() = 1.0f / clip_position.w(); // 存储1/w用于透视矫正
+    output_payload.viewport_position.w() = clip_position.w(); // 透视矫正
     
     // 将法线变换到世界坐标系
     Vector4f normal_homogeneous = Uniforms::inv_trans_M * Vector4f(payload.normal.x(), payload.normal.y(), payload.normal.z(), 0.0f);
